@@ -64,6 +64,8 @@
 #define ABSOLUTE_RELA_TYPE R_PPC64_ADDR64
 #elif __s390x__
 #define ABSOLUTE_RELA_TYPE R_390_64
+#elif __aarch64__
+#define ABSOLUTE_RELA_TYPE R_AARCH64_ABS64
 #else
 #define ABSOLUTE_RELA_TYPE R_X86_64_64
 #endif
@@ -573,8 +575,8 @@ static void kpatch_compare_correlated_section(struct section *sec)
 		DIFF_FATAL("%s section header details differ from %s", sec1->name, sec2->name);
 
 	/* Short circuit for mcount sections, we rebuild regardless */
-	if (!strcmp(sec->name, ".rela__mcount_loc") ||
-	    !strcmp(sec->name, "__mcount_loc")) {
+	if (!strcmp(sec->name, MCOUNT_RELA_NAME) ||
+	    !strcmp(sec->name, MCOUNT_SECTION_NAME)) {
 		sec->status = SAME;
 		goto out;
 	}
@@ -1041,6 +1043,14 @@ static void kpatch_correlate_symbols(struct list_head *symlist_orig,
 			 */
 			if (sym_orig->type == STT_NOTYPE &&
 			    !strncmp(sym_orig->name, ".LC", 3))
+				continue;
+
+			/*
+			 * The $d or $x symbols are aarch64 Mapping Symbols
+			 */
+			if (sym_orig->name && sym_orig->name[0] == '$' &&
+			    sym_orig->type == STT_NOTYPE && sym_orig->bind == STB_LOCAL &&
+			    !sym_orig->sym.st_size)
 				continue;
 
 			/* group section symbols must have correlated sections */
@@ -1529,7 +1539,7 @@ static void kpatch_replace_sections_syms(struct kpatch_elf *kelf)
 				continue;
 			}
 
-#if defined(__powerpc64__) || defined(__s390x__)
+#if defined(__powerpc64__) || defined(__s390x__) || defined(__aarch64__)
 			add_off = 0;
 #else
 			if (rela->type == R_X86_64_PC32 ||
@@ -2111,7 +2121,7 @@ static int static_call_sites_group_size(struct kpatch_elf *kelf, int offset)
 	return size;
 }
 #endif
-#if defined __s390x__ || defined __x86_64__
+#if defined __s390x__ || defined __aarch64__ || defined __x86_64__
 static int altinstructions_group_size(struct kpatch_elf *kelf, int offset)
 {
 	static int size = 0;
@@ -2266,6 +2276,12 @@ static struct special_section special_sections[] = {
 	},
 #endif
 #ifdef __s390x__
+	{
+		.name		= ".altinstructions",
+		.group_size	= altinstructions_group_size,
+	},
+#endif
+#ifdef __aarch64__
 	{
 		.name		= ".altinstructions",
 		.group_size	= altinstructions_group_size,
@@ -3499,7 +3515,7 @@ static void kpatch_create_mcount_sections(struct kpatch_elf *kelf)
 			nr++;
 
 	/* create text/rela section pair */
-	sec = create_section_pair(kelf, "__mcount_loc", sizeof(void*), nr);
+	sec = create_section_pair(kelf, MCOUNT_SECTION_NAME, sizeof(void*), nr);
 	relasec = sec->rela;
 
 	/* populate sections */
@@ -3559,6 +3575,23 @@ static void kpatch_create_mcount_sections(struct kpatch_elf *kelf)
 #elif __s390x__
 		/* brcl 0,0 is present at beginning of each function with mhotpatch */
 		insn_offset = 0;
+#elif __aarch64__
+		/*
+		 * 2 nops are present at beginning of each function with -fpatchable-entry=2.
+		 * However if CONFIG_ARM64_BTI_KERNEL=y, bti instruction is inserted before nop
+		 * for example:
+		 * <__traceiter_vm_unmapped_area>:
+		 * 	d503245f        bti     c
+		 * 	d503201f        nop
+		 * 	d503201f        nop
+		 * 	d503233f        paciasp
+		 */
+		unsigned int *insn;
+		insn = (unsigned int *)sym->sec->data->d_buf;
+		if (*insn == 0xd503245f)
+			insn_offset = 4;
+		else
+			insn_offset = 0;
 #else /* __powerpc64__ */
 {
 		struct rela *rela;

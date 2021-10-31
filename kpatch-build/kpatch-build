@@ -381,7 +381,7 @@ find_special_section_data() {
 		return
 	fi
 
-	[[ "$CONFIG_PARAVIRT" -eq 0 ]] && AWK_OPTIONS="-vskip_p=1"
+	[[ "$CONFIG_PARAVIRT" -eq 0 || "$ARCH" = "aarch64" ]] && AWK_OPTIONS="-vskip_p=1"
 	[[ "$CONFIG_UNWINDER_ORC" -eq 0 ]] && AWK_OPTIONS="$AWK_OPTIONS -vskip_o=1"
 	[[ "$CONFIG_JUMP_LABEL" -eq 0 ]] && AWK_OPTIONS="$AWK_OPTIONS -vskip_j=1"
 	[[ "$CONFIG_PRINTK_INDEX" -eq 0 ]] && AWK_OPTIONS="$AWK_OPTIONS -vskip_i=1"
@@ -432,7 +432,7 @@ find_special_section_data() {
 	[[ -z "$ALT_STRUCT_SIZE" ]] && die "can't find special struct alt_instr size"
 	[[ -z "$BUG_STRUCT_SIZE" ]] && die "can't find special struct bug_entry size"
 	[[ -z "$EX_STRUCT_SIZE" ]]  && die "can't find special struct paravirt_patch_site size"
-	[[ -z "$PARA_STRUCT_SIZE" && "$CONFIG_PARAVIRT" -ne 0 ]] && die "can't find special struct paravirt_patch_site size"
+	[[ -z "$PARA_STRUCT_SIZE" && "$CONFIG_PARAVIRT" -ne 0 && "$ARCH" != "aarch64" ]] && die "can't find special struct paravirt_patch_site size"
 	[[ -z "$ORC_STRUCT_SIZE" && "$CONFIG_UNWINDER_ORC" -ne 0 ]] && die "can't find special struct orc_entry size"
 	[[ -z "$JUMP_STRUCT_SIZE" && "$CONFIG_JUMP_LABEL" -ne 0 ]] && die "can't find special struct jump_entry size"
 	[[ -z "$PRINTK_INDEX_STRUCT_SIZE" && "$CONFIG_PRINTK_INDEX" -ne 0 ]] && die "can't find special struct pi_entry size"

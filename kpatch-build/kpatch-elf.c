@@ -342,6 +342,18 @@ void kpatch_create_symbol_list(struct kpatch_elf *kelf)
 static void kpatch_find_func_profiling_calls(struct kpatch_elf *kelf)
 {
 	struct symbol *sym;
+
+#if __aarch64__
+	struct section *mcount_sec;
+	/* find __patchable_function_entries section */
+	list_for_each_entry(mcount_sec, &kelf->sections, list) {
+		if (!strcmp(mcount_sec->name, MCOUNT_SECTION_NAME))
+			break;
+	}
+	if (!mcount_sec)
+		return;
+#endif
+
 	list_for_each_entry(sym, &kelf->symbols, list) {
 		if (sym->type != STT_FUNC || !sym->sec || !sym->sec->rela)
 			continue;
@@ -358,6 +370,19 @@ static void kpatch_find_func_profiling_calls(struct kpatch_elf *kelf)
 		insn = sym->sec->data->d_buf;
 		if (insn[0] == 0xc0 && insn[1] == 0x04 && insn[2] == 0x00)
 			sym->has_func_profiling = 1;
+#elif __aarch64__
+		struct rela *rela;
+		list_for_each_entry(rela, &mcount_sec->rela->relas, list) {
+			if ((!strncmp(rela->sym->name, ".text.", 6) &&
+			     !strcmp(rela->sym->name + 6, sym->name)) ||
+			    (!strncmp(rela->sym->name, ".text.hot.", 10) &&
+			     !strcmp(rela->sym->name + 10, sym->name)) ||
+			    (!strncmp(rela->sym->name, ".text.unlikely.", 15) &&
+			     !strcmp(rela->sym->name + 15, sym->name))) {
+				sym->has_func_profiling = 1;
+				break;
+			}
+		}
 #else
 		struct rela *rela;
 		rela = list_first_entry(&sym->sec->rela->relas, struct rela,

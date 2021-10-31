@@ -161,6 +161,14 @@ int offset_of_string(struct list_head *list, char *name);
 #define R_PPC64_ENTRY   118
 #endif
 
+#ifdef __aarch64__
+#define MCOUNT_SECTION_NAME "__patchable_function_entries"
+#define MCOUNT_RELA_NAME ".rela__patchable_function_entries"
+#else
+#define MCOUNT_SECTION_NAME "__mcount_loc"
+#define MCOUNT_RELA_NAME ".rela__mcount_loc"
+#endif
+
 /*************
  * Functions
  * **********/
