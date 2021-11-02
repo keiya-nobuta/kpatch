@@ -773,6 +773,84 @@ static bool kpatch_line_macro_change_only(struct section *sec)
 
 	return true;
 }
+#elif __aarch64__
+#define AARCH64_INSTR_LEN 4
+
+static bool kpatch_line_macro_change_only(struct section *sec)
+{
+	unsigned long start1, start2, size, offset;
+	unsigned int instr1, instr2;
+	struct rela *rela;
+	int lineonly = 0, found;
+
+	if (sec->status != CHANGED ||
+	    is_rela_section(sec) ||
+	    !is_text_section(sec) ||
+	    sec->sh.sh_size != sec->twin->sh.sh_size ||
+	    !sec->rela ||
+	    sec->rela->status != SAME)
+		return false;
+
+	start1 = (unsigned long)sec->twin->data->d_buf;
+	start2 = (unsigned long)sec->data->d_buf;
+	size = sec->sh.sh_size;
+	for (offset = 0; offset < size; offset += AARCH64_INSTR_LEN) {
+		if (!memcmp((void *)start1 + offset, (void *)start2 + offset,
+			    AARCH64_INSTR_LEN))
+			continue;
+
+		instr1 = *(unsigned int *)(start1 + offset) & 0x7F800000;
+		instr2 = *(unsigned int *)(start2 + offset) & 0x7F800000;
+
+		/*
+		 * verify it's a mov instruction.
+		 * The diff of original and patched object looks for example:
+		 *  Disassembly of section .text:
+		 *  @@ -4139,7 +4139,7 @@
+		 *          90000001        adrp    x1, <dst_output>
+		 *          39000002        strb    w2, [x0]
+		 *          91000021        add     x1, x1, #0x0
+		 *  -       52816122        mov     w2, #0xb09                      // #2825
+		 *  +       528161a2        mov     w2, #0xb0d                      // #2829
+		 *          90000000        adrp    x0, <dst_output>
+		 *          91000000        add     x0, x0, #0x0
+		 *          94000000        bl      <__warn_printk>
+		 */
+		if (!(instr1 == 0x52800000 && instr2 == 0x52800000))
+			return false;
+
+		found = 0;
+		list_for_each_entry(rela, &sec->rela->relas, list) {
+			if (rela->offset < offset + AARCH64_INSTR_LEN)
+				continue;
+			if (rela->string)
+				continue;
+			if (!strncmp(rela->sym->name, "__warned.", 9))
+				continue;
+			if (!strncmp(rela->sym->name, "warn_slowpath_", 14) ||
+			   (!strcmp(rela->sym->name, "__warn_printk")) ||
+			   (!strcmp(rela->sym->name, "__might_sleep")) ||
+			   (!strcmp(rela->sym->name, "___might_sleep")) ||
+			   (!strcmp(rela->sym->name, "__might_fault")) ||
+			   (!strcmp(rela->sym->name, "printk")) ||
+			   (!strcmp(rela->sym->name, "lockdep_rcu_suspicious"))) {
+				found = 1;
+				break;
+			}
+			return false;
+		}
+		if (!found)
+			return false;
+
+		lineonly = 1;
+	}
+
+	if (!lineonly)
+		ERROR("no instruction changes detected for changed section %s",
+		      sec->name);
+
+	return true;
+}
 #else
 static bool kpatch_line_macro_change_only(struct section *sec)
 {
