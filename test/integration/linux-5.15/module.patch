@@ -1,0 +1,68 @@
+diff --git a/fs/nfsd/export.c b/fs/nfsd/export.c
+index 9421dae22737..abedd04da61d 100644
+--- a/fs/nfsd/export.c
++++ b/fs/nfsd/export.c
+@@ -1294,12 +1294,41 @@ static void exp_flags(struct seq_file *m, int flag, int fsid,
+ 	}
+ }
+ 
++#include <linux/version.h>
++extern char *kpatch_string(void);
++
+ static int e_show(struct seq_file *m, void *p)
+ {
+ 	struct cache_head *cp = p;
+ 	struct svc_export *exp = container_of(cp, struct svc_export, h);
+ 	struct cache_detail *cd = m->private;
+ 	bool export_stats = is_export_stats_file(m);
++#ifdef CONFIG_X86_64
++	unsigned long long sched_clock;
++
++	alternative("ud2", "call yield", X86_FEATURE_ALWAYS);
++	alternative("call yield", "ud2", X86_FEATURE_IA64);
++
++	sched_clock = paravirt_sched_clock();
++	if (!jiffies)
++		printk("kpatch: sched_clock: %llu\n", sched_clock);
++#endif
++
++	pr_debug("kpatch: pr_debug() test\n");
++
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
++{
++	static DEFINE_STATIC_KEY_TRUE(kpatch_key);
++
++	if (static_branch_unlikely(&mcsafe_key))
++		printk("kpatch: mcsafe_key\n");
++
++	BUG_ON(!static_branch_likely(&kpatch_key));
++	static_branch_disable(&kpatch_key);
++	BUG_ON(static_branch_likely(&kpatch_key));
++	static_branch_enable(&kpatch_key);
++}
++#endif
+ 
+ 	if (p == SEQ_START_TOKEN) {
+ 		seq_puts(m, "# Version 1.1\n");
+@@ -1307,6 +1336,7 @@ static int e_show(struct seq_file *m, void *p)
+ 			seq_puts(m, "# Path Client Start-time\n#\tStats\n");
+ 		else
+ 			seq_puts(m, "# Path Client(Flags) # IPs\n");
++		seq_puts(m, kpatch_string());
+ 		return 0;
+ 	}
+ 
+diff --git a/net/netlink/af_netlink.c b/net/netlink/af_netlink.c
+index ada47e59647a..3ee934ea20bf 100644
+--- a/net/netlink/af_netlink.c
++++ b/net/netlink/af_netlink.c
+@@ -2916,4 +2916,9 @@ static int __init netlink_proto_init(void)
+ 	panic("netlink_init: Cannot allocate nl_table\n");
+ }
+ 
++char *kpatch_string(void)
++{
++	return "# kpatch\n";
++}
++
+ core_initcall(netlink_proto_init);
