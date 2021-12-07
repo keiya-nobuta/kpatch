@@ -1,0 +1,4 @@
+sudo modprobe usb_wwan
+sudo modprobe ir-usb
+
+cat /sys/bus/usb-serial/drivers/generic/new_id | grep "kpatch"
