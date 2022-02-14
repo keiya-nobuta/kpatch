@@ -1,0 +1,21 @@
+diff --git a/fs/proc/meminfo.c b/fs/proc/meminfo.c
+index 6fa761c9cc78..30671cc92c29 100644
+--- a/fs/proc/meminfo.c
++++ b/fs/proc/meminfo.c
+@@ -29,6 +29,8 @@ static void show_val_kb(struct seq_file *m, const char *s, unsigned long num)
+ 	seq_write(m, " kB\n", 4);
+ }
+ 
++static int foo = 5;
++
+ static int meminfo_proc_show(struct seq_file *m, void *v)
+ {
+ 	struct sysinfo i;
+@@ -139,6 +141,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
+ 	show_val_kb(m, "FilePmdMapped:  ",
+ 		    global_node_page_state(NR_FILE_PMDMAPPED));
+ #endif
++	seq_printf(m, "kpatch:         %d\n", foo);
+ 
+ #ifdef CONFIG_CMA
+ 	show_val_kb(m, "CmaTotal:       ", totalcma_pages);
